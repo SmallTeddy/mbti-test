@@ -15,6 +15,6 @@ export interface Question {
 export interface PersonalityResult {
   name: string;
   type: PersonalityType;
-  details: string;
+  details?: string;
   description: string;
 }
