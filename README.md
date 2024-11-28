@@ -13,7 +13,7 @@
 要开始使用该项目，请克隆仓库并安装依赖项：
 
 ```bash
-git clone https://github.com/yourusername/mbti-test.git
+git clone https://github.com/SmallTeddy/mbti-test.git
 cd mbti-test
 npm install
 ```
