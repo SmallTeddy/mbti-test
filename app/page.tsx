@@ -78,11 +78,11 @@ export default function PersonalityTest() {
             <div className="grid w-full items-center gap-4">
               <div className="flex flex-col space-y-1.5">
                 <Label htmlFor="question" className="text-xl text-left mb-4">{questions[currentQuestion].text}</Label>
-                <RadioGroup onValueChange={(value) => handleAnswer(value as PersonalityTrait)} className="flex flex-col space-y-2">
-                  {Object.entries(questions[currentQuestion].options).map(([trait, option]) => (
-                    <label key={trait} className="flex items-center space-x-2 justify-start">
-                      <RadioGroupItem value={trait} id={`option-${trait}`} />
-                      <Label htmlFor={`option-${trait}`} className="text-lg cursor-pointer">{option}</Label>
+                <RadioGroup key={currentQuestion} onValueChange={(value) => handleAnswer(questions[currentQuestion].options[parseInt(value)].trait)} className="flex flex-col space-y-2">
+                  {questions[currentQuestion].options.map((option, index) => (
+                    <label key={`${currentQuestion}-${index}`} className="flex items-center space-x-2 justify-start">
+                      <RadioGroupItem value={String(index)} id={`option-${currentQuestion}-${index}`} />
+                      <Label htmlFor={`option-${currentQuestion}-${index}`} className="text-lg cursor-pointer">{option.text}</Label>
                     </label>
                   ))}
                 </RadioGroup>
