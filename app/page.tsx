@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -8,9 +8,52 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Progress } from "@/components/ui/progress"
 import { questions } from '../data/questions'
 import { personalityDescriptions } from '../data/personalityDescriptions'
-import { PersonalityTrait, PersonalityType } from '../types/personality'
+import { PersonalityTrait, PersonalityType, Question } from '../types/personality'
 
 const GITHUB_LINK = "https://github.com/SmallTeddy/mbti-test"
+
+// 题目按维度分组:1-50 E/I, 51-100 S/N, 101-150 T/F, 151-200 J/P
+const QUESTION_GROUPS: { traitPair: [PersonalityTrait, PersonalityTrait]; range: [number, number] }[] = [
+  { traitPair: ['E', 'I'], range: [0, 50] },
+  { traitPair: ['S', 'N'], range: [50, 100] },
+  { traitPair: ['T', 'F'], range: [100, 150] },
+  { traitPair: ['J', 'P'], range: [150, 200] },
+]
+
+const QUESTION_COUNT_OPTIONS = [50, 100, 150, 200] as const
+
+// 根据总数从 4 个维度均衡抽取题目,确保每个维度都有近似数量的题目
+function pickQuestions(totalCount: number): Question[] {
+  if (totalCount >= questions.length) return [...questions]
+
+  const perGroup = Math.floor(totalCount / QUESTION_GROUPS.length)
+  const remainder = totalCount - perGroup * QUESTION_GROUPS.length
+
+  const picked: Question[] = []
+  QUESTION_GROUPS.forEach((group, idx) => {
+    const [start, end] = group.range
+    const groupQuestions = questions.slice(start, end)
+    // 余数依次加到前几组,保证总数精确
+    const count = perGroup + (idx < remainder ? 1 : 0)
+    // 均匀抽样:步长取整,确保分布在整个区间
+    const step = Math.max(1, Math.floor(groupQuestions.length / count))
+    const sampled: Question[] = []
+    for (let i = 0; i < groupQuestions.length && sampled.length < count; i += step) {
+      sampled.push(groupQuestions[i])
+    }
+    // 若因步长导致不够,从尾部补齐
+    let fallbackIdx = groupQuestions.length - 1
+    while (sampled.length < count && fallbackIdx >= 0) {
+      if (!sampled.includes(groupQuestions[fallbackIdx])) {
+        sampled.push(groupQuestions[fallbackIdx])
+      }
+      fallbackIdx--
+    }
+    picked.push(...sampled)
+  })
+
+  return picked
+}
 
 function GithubHeader() {
   return (
@@ -32,15 +75,28 @@ function GithubHeader() {
 }
 
 export default function PersonalityTest() {
+  const [selectedCount, setSelectedCount] = useState<number | null>(null)
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<PersonalityTrait[]>([])
   const [result, setResult] = useState<PersonalityType | null>(null)
+
+  const activeQuestions = useMemo(() => {
+    if (!selectedCount) return [] as Question[]
+    return pickQuestions(selectedCount)
+  }, [selectedCount])
+
+  const handleStart = (count: number) => {
+    setSelectedCount(count)
+    setCurrentQuestion(0)
+    setAnswers([])
+    setResult(null)
+  }
 
   const handleAnswer = (trait: PersonalityTrait) => {
     const newAnswers = [...answers, trait]
     setAnswers(newAnswers)
 
-    if (currentQuestion < questions.length - 1) {
+    if (currentQuestion < activeQuestions.length - 1) {
       setCurrentQuestion(currentQuestion + 1)
     } else {
       const personalityType = calculatePersonalityType(newAnswers)
@@ -61,6 +117,7 @@ export default function PersonalityTest() {
   }
 
   const resetTest = () => {
+    setSelectedCount(null)
     setCurrentQuestion(0)
     setAnswers([])
     setResult(null)
@@ -87,22 +144,57 @@ export default function PersonalityTest() {
     )
   }
 
+  // 开始界面:选择题数
+  if (!selectedCount) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+        <GithubHeader />
+        <Card className="w-full max-w-lg">
+          <CardHeader>
+            <CardTitle className="text-2xl sm:text-3xl text-center">人格测试</CardTitle>
+            <CardDescription className="text-lg text-center mt-2">请选择题量开始测试</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {QUESTION_COUNT_OPTIONS.map((count) => (
+                <Button
+                  key={count}
+                  variant="outline"
+                  onClick={() => handleStart(count)}
+                  className="h-24 sm:h-28 text-lg sm:text-xl flex flex-col gap-1"
+                >
+                  <span className="font-semibold">{count} 题</span>
+                  <span className="text-xs text-gray-500 font-normal">
+                    约 {Math.ceil(count * 0.2)} 分钟
+                  </span>
+                </Button>
+              ))}
+            </div>
+            <p className="text-sm text-gray-500 text-center mt-4">
+              四个维度(E/I、S/N、T/F、J/P)均衡抽题
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
       <GithubHeader />
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle className="text-2xl sm:text-3xl text-center">人格测试</CardTitle>
-          <CardDescription className="text-lg text-center mt-2">问题 {currentQuestion + 1} / {questions.length}</CardDescription>
-          <Progress value={(currentQuestion + 1) / questions.length * 100} className="mt-4" />
+          <CardDescription className="text-lg text-center mt-2">问题 {currentQuestion + 1} / {activeQuestions.length}</CardDescription>
+          <Progress value={(currentQuestion + 1) / activeQuestions.length * 100} className="mt-4" />
         </CardHeader>
         <CardContent>
           <form>
             <div className="grid w-full items-center gap-4">
               <div className="flex flex-col space-y-1.5">
-                <Label htmlFor="question" className="text-xl text-left mb-4">{questions[currentQuestion].text}</Label>
-                <RadioGroup key={currentQuestion} onValueChange={(value) => handleAnswer(questions[currentQuestion].options[parseInt(value)].trait)} className="flex flex-col space-y-2">
-                  {questions[currentQuestion].options.map((option, index) => (
+                <Label htmlFor="question" className="text-xl text-left mb-4">{activeQuestions[currentQuestion].text}</Label>
+                <RadioGroup key={currentQuestion} onValueChange={(value) => handleAnswer(activeQuestions[currentQuestion].options[parseInt(value)].trait)} className="flex flex-col space-y-2">
+                  {activeQuestions[currentQuestion].options.map((option, index) => (
                     <label key={`${currentQuestion}-${index}`} className="flex items-center space-x-2 justify-start">
                       <RadioGroupItem value={String(index)} id={`option-${currentQuestion}-${index}`} />
                       <Label htmlFor={`option-${currentQuestion}-${index}`} className="text-lg cursor-pointer">{option.text}</Label>
